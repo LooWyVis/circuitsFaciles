@@ -213,6 +213,17 @@ class App:
         self.drag_dx = 0
         self.drag_dy = 0
 
+        self.scale = 1.0
+        self.scale_min = 0.5
+        self.scale_max = 3.0
+
+        self.cam_x = 0.0
+        self.cam_y = 0.0
+        self.panning = False
+        self.pan_start = (0, 0)
+        self.cam_start = (0.0, 0.0)
+        self.space_down = False
+
         self._build_left_panel()
         self._bind_canvas()
 
@@ -274,6 +285,24 @@ class App:
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
 
+        # Zoom
+        self.canvas.bind("<MouseWheel>", self.on_zoom_wheel)      # Windows/Mac
+        self.canvas.bind("<Button-4>", lambda e: self.on_zoom(1, e))  # Linux
+        self.canvas.bind("<Button-5>", lambda e: self.on_zoom(-1, e)) # Linux
+        self.root.bind("<Control-plus>", lambda e: self.on_zoom(1))
+        self.root.bind("<Control-minus>", lambda e: self.on_zoom(-1))
+        self.root.bind("<Control-0>", self.on_zoom_reset)
+        self.root.bind("<Control-equal>", lambda e: self.on_zoom(1))
+
+
+        self.root.bind("<KeyPress-space>", lambda e: self._set_space(True))
+        self.root.bind("<KeyRelease-space>", lambda e: self._set_space(False))
+
+        self.root.bind("<Left>",  lambda e: self._pan_key(-40, 0))
+        self.root.bind("<Right>", lambda e: self._pan_key(40, 0))
+        self.root.bind("<Up>",    lambda e: self._pan_key(0, -40))
+        self.root.bind("<Down>",  lambda e: self._pan_key(0, 40))
+
     def add_gate(self, gtype: str, x: int, y: int):
         g = Gate(self.next_gid, gtype, x, y)
         self.next_gid += 1
@@ -282,52 +311,59 @@ class App:
         return g
 
     def draw_gate(self, g: Gate):
-        # Body
+        # Body (scaled)
+        x1, y1 = self.w2c(g.x, g.y)
+        x2, y2 = self.w2c(g.x + GATE_W, g.y + GATE_H)
+
         g.rect_id = self.canvas.create_rectangle(
-            g.x, g.y, g.x + GATE_W, g.y + GATE_H,
+            x1, y1, x2, y2,
             outline="#333", width=2, fill="#f7f7f7"
         )
+
         g.text_id = self.canvas.create_text(
-            g.x + GATE_W // 2,
-            g.y + GATE_H // 2,
+            (x1 + x2) / 2,
+            (y1 + y2) / 2,
             text=g.title(),
             font=("Arial", 12, "bold"),
             fill="black"
         )
 
-        # --- Bulle d'inversion (européen) pour NON / NOR ---
+        # --- Bulle inversion (NOT/NOR) ---
         if g.gtype in ("NOT", "NOR"):
-            cx = g.x + GATE_W + INVERT_R  # juste à droite du rectangle
-            cy = g.y + GATE_H // 2
+            cxw = g.x + GATE_W + INVERT_R
+            cyw = g.y + GATE_H // 2
+            cx, cy = self.w2c(cxw, cyw)
+            r = INVERT_R * self.scale
             g.invert_id = self.canvas.create_oval(
-                cx - INVERT_R, cy - INVERT_R,
-                cx + INVERT_R, cy + INVERT_R,
+                cx - r, cy - r, cx + r, cy + r,
                 outline="black", width=2, fill="white"
             )
         else:
             g.invert_id = None
 
-        # Pins
+        # Pins (scaled)
         for p in g.inputs + g.outputs:
+            cx, cy = self.w2c(p.x, p.y)
+            r = PIN_R * self.scale
             p.canvas_id = self.canvas.create_oval(
-                p.x - PIN_R, p.y - PIN_R, p.x + PIN_R, p.y + PIN_R,
+                cx - r, cy - r, cx + r, cy + r,
                 outline="#222", width=2, fill=bool_to_color(p.value)
             )
 
-        # For SRC show value text
+        # SRC / OUT texts (scaled position, font stays same size)
         if g.gtype == "SRC":
-            g.value_text_id = self.canvas.create_text(
-                g.x + GATE_W // 2, g.y + GATE_H - 12,
-                text="0", font=("Arial", 11), fill="black"
-            )
+            tx, ty = self.w2c(g.x + GATE_W // 2, g.y + GATE_H - 12)
+            g.value_text_id = self.canvas.create_text(tx, ty, text="0", font=("Arial", 11), fill="black")
+            g.led_id = None
 
         elif g.gtype == "OUT":
-            cx, cy = g.x + GATE_W - 18, g.y + GATE_H // 2
-            g.led_id = self.canvas.create_oval(cx - 10, cy - 10, cx + 10, cy + 10, width=2)
-            g.value_text_id = self.canvas.create_text(
-                g.x + 20, g.y + GATE_H - 12,
-                text="?", font=("Arial", 11), fill="black"
-            )
+            cxw, cyw = g.x + GATE_W - 18, g.y + GATE_H // 2
+            cx, cy = self.w2c(cxw, cyw)
+            rr = 10 * self.scale
+            g.led_id = self.canvas.create_oval(cx - rr, cy - rr, cx + rr, cy + rr, width=2)
+
+            tx, ty = self.w2c(g.x + 20, g.y + GATE_H - 12)
+            g.value_text_id = self.canvas.create_text(tx, ty, text="?", font=("Arial", 11), fill="black")
 
         else:
             g.value_text_id = None
@@ -345,9 +381,10 @@ class App:
         self.update_colors()
 
     def draw_wire(self, w: Wire):
-        x1, y1 = w.src.x, w.src.y
-        x2, y2 = w.dst.x, w.dst.y
-        w.canvas_id = self.canvas.create_line(x1, y1, x2, y2, width=3, fill=bool_to_color(w.value))
+        x1, y1 = self.w2c(w.src.x, w.src.y)
+        x2, y2 = self.w2c(w.dst.x, w.dst.y)
+        width = max(1, int(3 * self.scale))
+        w.canvas_id = self.canvas.create_line(x1, y1, x2, y2, width=width, fill=bool_to_color(w.value))
 
     def update_colors(self):
         # pins
@@ -391,15 +428,17 @@ class App:
     def on_click(self, event):
         m = self.mode.get()
 
+        wx, wy = self.c2w(event.x, event.y)
+
         if m == "delete":
             # priorité : fil puis composant
-            w = self.find_wire_at(event.x, event.y)
+            w = self.find_wire_at(wx, wy)
             if w is not None:
                 self.delete_wire(w)
                 self.simulate()
                 return
 
-            g = self.find_gate_at(event.x, event.y)
+            g = self.find_gate_at(wx, wy)
             if g is not None:
                 self.delete_gate(g)
                 self.simulate()
@@ -407,12 +446,12 @@ class App:
 
         if m.startswith("place:"):
             gtype = m.split(":", 1)[1]
-            self.add_gate(gtype, event.x, event.y)
+            self.add_gate(gtype, wx, wy)
             self.simulate()
             return
 
         if m == "wire":
-            pin = self.find_pin_at(event.x, event.y)
+            pin = self.find_pin_at(wx, wy)
             if pin is None:
                 return
 
@@ -436,8 +475,9 @@ class App:
         # select mode: nothing for now (future: drag/drop)
 
     def on_double_click(self, event):
+        wx, wy = self.c2w(event.x, event.y)
         # double click on SRC toggles value
-        g = self.find_gate_at(event.x, event.y)
+        g = self.find_gate_at(wx, wy)
         if g and g.gtype == "SRC":
             g.value = not g.value
             self.simulate()
@@ -853,38 +893,71 @@ class App:
     def on_press(self, event):
         m = self.mode.get()
 
+        wx, wy = self.c2w(event.x, event.y)
+
         if m == "delete":
-            w = self.find_wire_at(event.x, event.y)
+            w = self.find_pin_at(wx, wy)
             if w is not None:
                 self.delete_wire(w)
                 self.simulate()
                 return
-            g = self.find_gate_at(event.x, event.y)
+            g = self.find_gate_at(wx, wy)
             if g is not None:
                 self.delete_gate(g)
                 self.simulate()
             return
 
         # Si on est en mode placement ou fil, on garde le comportement actuel
-        if m != "select":
-            self.on_click(event)
-            return
+        # Pan si :
+        # - on est en mode select
+        # - et (on clique dans le vide) OU (on tient Espace)
+        if m == "select":
+            wx, wy = self.c2w(event.x, event.y)
+
+            pin = self.find_pin_at(wx, wy)
+            g = self.find_gate_at(wx, wy)
+
+            if self.space_down or (pin is None and g is None):
+                self.panning = True
+                self.pan_start = (event.x, event.y)     # coords canvas (pixels)
+                self.cam_start = (self.cam_x, self.cam_y)
+                return
 
         # En mode select : si on clique sur un pin, ne pas déplacer (utile pour éviter conflits)
-        pin = self.find_pin_at(event.x, event.y)
+        pin = self.find_pin_at(wx, wy)
         if pin is not None:
             return
 
-        g = self.find_gate_at(event.x, event.y)
+        g = self.find_gate_at(wx, wy)
         if g is None:
             return
 
         self.drag_gate = g
-        self.drag_dx = event.x - g.x
-        self.drag_dy = event.y - g.y
+        
+        wx, wy = self.c2w(event.x, event.y)
+        self.drag_dx = wx - g.x
+        self.drag_dy = wy - g.y
 
 
     def on_drag(self, event):
+
+        if self.panning:
+            dx_pix = event.x - self.pan_start[0]
+            dy_pix = event.y - self.pan_start[1]
+
+            # conversion pixels -> monde
+            dx_w = dx_pix / self.scale
+            dy_w = dy_pix / self.scale
+
+            # on déplace la caméra dans le sens inverse du drag
+            self.cam_x = self.cam_start[0] - dx_w
+            self.cam_y = self.cam_start[1] - dy_w
+
+            self.redraw_all()
+            self.update_colors()
+            return
+
+
         if self.mode.get() != "select":
             return
         
@@ -892,19 +965,20 @@ class App:
             return
         g = self.drag_gate
 
-        # Nouvelle position
-        g.x = event.x - self.drag_dx
-        g.y = event.y - self.drag_dy
 
-        # Met à jour positions pins (et donc fils)
+        wx, wy = self.c2w(event.x, event.y)
+        g.x = wx - self.drag_dx
+        g.y = wy - self.drag_dy
         g.update_pin_positions()
+        self.redraw_all()
+        self.update_colors()
         self._update_gate_drawing(g)
         self._update_wires_drawing()
-        self.update_colors()
 
 
     def on_release(self, event):
         self.drag_gate = None
+        self.panning = False
 
     
     def _update_gate_drawing(self, g: Gate):
@@ -947,7 +1021,9 @@ class App:
 
     def _update_wires_drawing(self):
         for w in self.wires:
-            self.canvas.coords(w.canvas_id, w.src.x, w.src.y, w.dst.x, w.dst.y)
+            x1, y1 = self.w2c(w.src.x, w.src.y)
+            x2, y2 = self.w2c(w.dst.x, w.dst.y)
+            self.canvas.coords(w.canvas_id, x1, y1, x2, y2)
 
     
     def _dist_point_to_segment(self, px, py, x1, y1, x2, y2):
@@ -963,6 +1039,7 @@ class App:
         return math.hypot(px - cx, py - cy)
 
     def find_wire_at(self, x, y, threshold=8):
+        threshold = threshold / self.scale
         # on teste du plus récent au plus ancien (comme pour les portes)
         for w in reversed(self.wires):
             d = self._dist_point_to_segment(x, y, w.src.x, w.src.y, w.dst.x, w.dst.y)
@@ -1013,6 +1090,44 @@ class App:
         # sécurité : si on avait commencé un fil depuis cette gate
         if self.pending_wire_src is not None and self.pending_wire_src.owner == g:
             self.pending_wire_src = None
+
+    def w2c(self, x, y):
+        # World -> Canvas
+        return (x - self.cam_x) * self.scale, (y - self.cam_y) * self.scale
+
+    def c2w(self, x, y):
+        # Canvas -> World
+        return x / self.scale + self.cam_x, y / self.scale + self.cam_y
+    
+    def on_zoom_wheel(self, event):
+        # event.delta > 0 zoom in, < 0 zoom out
+        direction = 1 if event.delta > 0 else -1
+        self.on_zoom(direction, event)
+
+    def on_zoom(self, direction, event=None):
+        factor = 1.1 if direction > 0 else 1/1.1
+        new_scale = self.scale * factor
+        new_scale = max(self.scale_min, min(self.scale_max, new_scale))
+
+        if abs(new_scale - self.scale) < 1e-9:
+            return
+
+        self.scale = new_scale
+        self.status.config(text=f"Mode: {self.mode.get()} | Zoom: {int(self.scale*100)} %")
+        self.redraw_all()
+
+    def on_zoom_reset(self, event=None):
+        self.scale = 1.0
+        self.redraw_all()
+
+    def _set_space(self, v: bool):
+        self.space_down = v
+
+    def _pan_key(self, dx_pix, dy_pix):
+        self.cam_x += dx_pix / self.scale
+        self.cam_y += dy_pix / self.scale
+        self.redraw_all()
+        self.update_colors()
 
 
 def main_ui():
