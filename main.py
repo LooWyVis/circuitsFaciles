@@ -59,7 +59,7 @@ class Wire:
 
 
 class Gate:
-    def __init__(self, gid: int, gtype: str, x: int, y: int):
+    def __init__(self, gid: int, gtype: str, x: int, y: int):        
         self.gid = gid
         self.gtype = gtype
         self.x = x
@@ -87,19 +87,24 @@ class Gate:
             self.inputs = [Pin(self, "in", 0, self.x, self.y + GATE_H // 2)]
             self.outputs = []  # pas de sortie
 
-        elif self.gtype in ("NOT", "NOR"):
-            self.inputs = [Pin(self, "in", 0, self.x, self.y + GATE_H // 2)]
-
-            # pin réel APRÈS la bulle
-            self.outputs = [
-                Pin(
-                    self,
-                    "out",
-                    0,
-                    self.x + GATE_W + INVERT_OFFSET,
-                    self.y + GATE_H // 2
-                )
+        
+        elif self.gtype == "NOT":
+            self.inputs = [
+                Pin(self, "in", 0, self.x, self.y + GATE_H // 2)
             ]
+            self.outputs = [
+                Pin(self, "out", 0, self.x + GATE_W + INVERT_OFFSET, self.y + GATE_H // 2)
+            ]
+
+        elif self.gtype == "NOR":
+            self.inputs = [
+                Pin(self, "in", 0, self.x, self.y + GATE_H // 3),
+                Pin(self, "in", 1, self.x, self.y + 2 * GATE_H // 3)
+            ]
+            self.outputs = [
+                Pin(self, "out", 0, self.x + GATE_W + INVERT_OFFSET, self.y + GATE_H // 2)
+            ]
+
         else:
             # 2-input gates
             self.inputs = [
@@ -116,10 +121,16 @@ class Gate:
         elif self.gtype == "OUT":
             self.inputs[0].x = self.x
             self.inputs[0].y = self.y + GATE_H // 2
-        elif self.gtype in ("NOT", "NOR"):
+        elif self.gtype == "NOT":
             self.inputs[0].x = self.x
             self.inputs[0].y = self.y + GATE_H // 2
-
+            self.outputs[0].x = self.x + GATE_W + INVERT_OFFSET
+            self.outputs[0].y = self.y + GATE_H // 2
+        elif self.gtype == "NOR":
+            self.inputs[0].x = self.x
+            self.inputs[0].y = self.y + GATE_H // 3
+            self.inputs[1].x = self.x
+            self.inputs[1].y = self.y + 2 * GATE_H // 3
             self.outputs[0].x = self.x + GATE_W + INVERT_OFFSET
             self.outputs[0].y = self.y + GATE_H // 2
         else:
@@ -226,6 +237,7 @@ class App:
         # Button(self.left, text="Simuler", command=self.simulate).pack(fill=X, pady=(6, 0))
         Button(self.left, text="Table de vérité", command=self.show_truth_table).pack(fill=X, pady=(4, 0))
         Button(self.left, text="Sauvegarder…", command=self.save_file).pack(fill=X, pady=(4, 0))
+        Button(self.left, text="Nouveau (vierge)", command=self.new_circuit).pack(fill=X, pady=(4, 0))
         Button(self.left, text="Charger…", command=self.load_file).pack(fill=X, pady=(4, 0))
 
         self.status = Label(
@@ -795,6 +807,25 @@ class App:
                 dfs(g.gid)
 
         return order
+    
+
+    def new_circuit(self):
+        # Optionnel : demander confirmation si quelque chose existe
+        if self.gates or self.wires:
+            ok = messagebox.askyesno(
+                "Nouveau circuit",
+                "Repartir sur un circuit vierge ?\nLes modifications non sauvegardées seront perdues."
+            )
+            if not ok:
+                return
+
+        self.gates = []
+        self.wires = []
+        self.next_gid = 1
+        self.pending_wire_src = None
+
+        self.canvas.delete("all")
+        self.set_mode("select")   # remet aussi le texte de statut
 
 
 def main_ui():
