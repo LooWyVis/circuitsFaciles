@@ -209,6 +209,10 @@ class App:
 
         self.invert_id = None
 
+        self.drag_gate = None
+        self.drag_dx = 0
+        self.drag_dy = 0
+
         self._build_left_panel()
         self._bind_canvas()
 
@@ -263,7 +267,9 @@ class App:
             self.status.config(text=f"Mode: {m}")
 
     def _bind_canvas(self):
-        self.canvas.bind("<Button-1>", self.on_click)
+        self.canvas.bind("<ButtonPress-1>", self.on_press)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
 
     def add_gate(self, gtype: str, x: int, y: int):
@@ -826,6 +832,91 @@ class App:
 
         self.canvas.delete("all")
         self.set_mode("select")   # remet aussi le texte de statut
+
+
+    def on_press(self, event):
+        m = self.mode.get()
+
+        # Si on est en mode placement ou fil, on garde le comportement actuel
+        if m != "select":
+            self.on_click(event)
+            return
+
+        # En mode select : si on clique sur un pin, ne pas déplacer (utile pour éviter conflits)
+        pin = self.find_pin_at(event.x, event.y)
+        if pin is not None:
+            return
+
+        g = self.find_gate_at(event.x, event.y)
+        if g is None:
+            return
+
+        self.drag_gate = g
+        self.drag_dx = event.x - g.x
+        self.drag_dy = event.y - g.y
+
+
+    def on_drag(self, event):
+        if self.drag_gate is None:
+            return
+        g = self.drag_gate
+
+        # Nouvelle position
+        g.x = event.x - self.drag_dx
+        g.y = event.y - self.drag_dy
+
+        # Met à jour positions pins (et donc fils)
+        g.update_pin_positions()
+        self._update_gate_drawing(g)
+        self._update_wires_drawing()
+        self.update_colors()
+
+
+    def on_release(self, event):
+        self.drag_gate = None
+
+    
+    def _update_gate_drawing(self, g: Gate):
+        # rectangle
+        self.canvas.coords(g.rect_id, g.x, g.y, g.x + GATE_W, g.y + GATE_H)
+
+        # titre
+        self.canvas.coords(g.text_id, g.x + GATE_W // 2, g.y + GATE_H // 2)
+
+        # pins
+        for p in g.inputs + g.outputs:
+            self.canvas.coords(
+                p.canvas_id,
+                p.x - PIN_R, p.y - PIN_R,
+                p.x + PIN_R, p.y + PIN_R
+            )
+
+        # bulle inversion (NOT / NOR)
+        if getattr(g, "invert_id", None) is not None:
+            cx = g.x + GATE_W + INVERT_R
+            cy = g.y + GATE_H // 2
+            self.canvas.coords(
+                g.invert_id,
+                cx - INVERT_R, cy - INVERT_R,
+                cx + INVERT_R, cy + INVERT_R
+            )
+
+        # LED (OUT)
+        if getattr(g, "led_id", None) is not None:
+            cx, cy = g.x + GATE_W - 18, g.y + GATE_H // 2
+            self.canvas.coords(g.led_id, cx - 10, cy - 10, cx + 10, cy + 10)
+
+        # texte valeur (SRC / OUT)
+        if getattr(g, "value_text_id", None) is not None:
+            if g.gtype == "SRC":
+                self.canvas.coords(g.value_text_id, g.x + GATE_W // 2, g.y + GATE_H - 12)
+            elif g.gtype == "OUT":
+                self.canvas.coords(g.value_text_id, g.x + 20, g.y + GATE_H - 12)
+
+
+    def _update_wires_drawing(self):
+        for w in self.wires:
+            self.canvas.coords(w.canvas_id, w.src.x, w.src.y, w.dst.x, w.dst.y)
 
 
 def main_ui():
