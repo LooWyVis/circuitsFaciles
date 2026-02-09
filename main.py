@@ -219,13 +219,13 @@ class App:
     def _build_left_panel(self):
         Label(self.left, text="Circuits logiques", font=("Arial", 14, "bold")).pack(anchor="w")
 
-        Label(self.left, text="_________________", font=("Arial", 12, "bold")).pack(anchor="w")
-        Label(self.left, text="                 ", font=("Arial", 12, "bold")).pack(anchor="w")
+        Label(self.left, text="_________________", font=("Arial", 12, "bold")).pack(anchor="w", pady=(0, 10))
 
         Label(self.left, text="Outils", font=("Arial", 12, "bold")).pack(anchor="w")
 
         Button(self.left, text="Fil", command=lambda: self.set_mode("wire")).pack(fill=X, pady=(6, 0))
-        Button(self.left, text="Sélection", command=lambda: self.set_mode("select")).pack(fill=X, pady=(4, 10))
+        Button(self.left, text="Sélection", command=lambda: self.set_mode("select")).pack(fill=X, pady=(6, 0))
+        Button(self.left, text="Suppression", command=lambda: self.set_mode("delete")).pack(fill=X, pady=(4, 10))
 
         Label(self.left, text="Composants", font=("Arial", 12, "bold")).pack(anchor="w")
 
@@ -234,7 +234,7 @@ class App:
         Button(self.left, text="ET", command=lambda: self.set_mode("place:AND")).pack(fill=X, pady=(4, 0))
         Button(self.left, text="OU", command=lambda: self.set_mode("place:OR")).pack(fill=X, pady=(4, 0))
         Button(self.left, text="XOR", command=lambda: self.set_mode("place:XOR")).pack(fill=X, pady=(4, 0))
-        Button(self.left, text="NOR", command=lambda: self.set_mode("place:NOR")).pack(fill=X, pady=(4, 10))
+        Button(self.left, text="NOR", command=lambda: self.set_mode("place:NOR")).pack(fill=X, pady=(4, 0))
         Button(self.left, text="Sortie (LED)", command=lambda: self.set_mode("place:OUT")).pack(fill=X, pady=(4, 10))
 
         Label(self.left, text="Actions", font=("Arial", 12, "bold")).pack(anchor="w")
@@ -263,6 +263,8 @@ class App:
             self.status.config(text="Mode: sélection (double-clic SRC pour changer l'entrée)")
         elif m.startswith("place:"):
             self.status.config(text=f"Mode: placer {m.split(':', 1)[1]} (clic sur le canvas)")
+        elif m == "delete":
+            self.status.config(text="Mode: suppression (clic sur fil ou composant)")
         else:
             self.status.config(text=f"Mode: {m}")
 
@@ -388,6 +390,20 @@ class App:
 
     def on_click(self, event):
         m = self.mode.get()
+
+        if m == "delete":
+            # priorité : fil puis composant
+            w = self.find_wire_at(event.x, event.y)
+            if w is not None:
+                self.delete_wire(w)
+                self.simulate()
+                return
+
+            g = self.find_gate_at(event.x, event.y)
+            if g is not None:
+                self.delete_gate(g)
+                self.simulate()
+            return
 
         if m.startswith("place:"):
             gtype = m.split(":", 1)[1]
@@ -837,6 +853,18 @@ class App:
     def on_press(self, event):
         m = self.mode.get()
 
+        if m == "delete":
+            w = self.find_wire_at(event.x, event.y)
+            if w is not None:
+                self.delete_wire(w)
+                self.simulate()
+                return
+            g = self.find_gate_at(event.x, event.y)
+            if g is not None:
+                self.delete_gate(g)
+                self.simulate()
+            return
+
         # Si on est en mode placement ou fil, on garde le comportement actuel
         if m != "select":
             self.on_click(event)
@@ -857,6 +885,9 @@ class App:
 
 
     def on_drag(self, event):
+        if self.mode.get() != "select":
+            return
+        
         if self.drag_gate is None:
             return
         g = self.drag_gate
@@ -917,6 +948,71 @@ class App:
     def _update_wires_drawing(self):
         for w in self.wires:
             self.canvas.coords(w.canvas_id, w.src.x, w.src.y, w.dst.x, w.dst.y)
+
+    
+    def _dist_point_to_segment(self, px, py, x1, y1, x2, y2):
+        # distance d'un point à un segment
+        dx, dy = x2 - x1, y2 - y1
+        if dx == 0 and dy == 0:
+            return math.hypot(px - x1, py - y1)
+
+        t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
+        t = max(0.0, min(1.0, t))
+        cx = x1 + t * dx
+        cy = y1 + t * dy
+        return math.hypot(px - cx, py - cy)
+
+    def find_wire_at(self, x, y, threshold=8):
+        # on teste du plus récent au plus ancien (comme pour les portes)
+        for w in reversed(self.wires):
+            d = self._dist_point_to_segment(x, y, w.src.x, w.src.y, w.dst.x, w.dst.y)
+            if d <= threshold:
+                return w
+        return None
+    
+    def delete_wire(self, w: Wire):
+        # effacer canvas
+        if w.canvas_id is not None:
+            self.canvas.delete(w.canvas_id)
+        # retirer de la liste
+        if w in self.wires:
+            self.wires.remove(w)
+
+    def delete_gate(self, g: Gate):
+        # supprimer les fils connectés
+        to_remove = [w for w in self.wires if (w.src.owner == g or w.dst.owner == g)]
+        for w in to_remove:
+            self.delete_wire(w)
+
+        # supprimer les éléments canvas de la gate
+        if g.rect_id is not None:
+            self.canvas.delete(g.rect_id)
+        if g.text_id is not None:
+            self.canvas.delete(g.text_id)
+
+        for p in g.inputs + g.outputs:
+            if p.canvas_id is not None:
+                self.canvas.delete(p.canvas_id)
+
+        # bulle inversion
+        if getattr(g, "invert_id", None) is not None:
+            self.canvas.delete(g.invert_id)
+
+        # LED
+        if getattr(g, "led_id", None) is not None:
+            self.canvas.delete(g.led_id)
+
+        # texte valeur
+        if getattr(g, "value_text_id", None) is not None:
+            self.canvas.delete(g.value_text_id)
+
+        # retirer de la liste
+        if g in self.gates:
+            self.gates.remove(g)
+
+        # sécurité : si on avait commencé un fil depuis cette gate
+        if self.pending_wire_src is not None and self.pending_wire_src.owner == g:
+            self.pending_wire_src = None
 
 
 def main_ui():
