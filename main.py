@@ -893,10 +893,15 @@ class App:
     def on_press(self, event):
         m = self.mode.get()
 
+        # Pour les modes "clic simple", on réutilise la logique existante
+        if m in ("wire", "delete") or m.startswith("place:"):
+            self.on_click(event)
+            return
+
         wx, wy = self.c2w(event.x, event.y)
 
         if m == "delete":
-            w = self.find_pin_at(wx, wy)
+            w = self.find_wire_at(wx, wy)
             if w is not None:
                 self.delete_wire(w)
                 self.simulate()
