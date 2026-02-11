@@ -12,3 +12,5 @@ env/
 # IDE (optionnel)
 .vscode/
 .idea/
+
+.DS_Store

@@ -970,10 +970,10 @@ class App:
         g.x = wx - self.drag_dx
         g.y = wy - self.drag_dy
         g.update_pin_positions()
-        self.redraw_all()
         self.update_colors()
         self._update_gate_drawing(g)
         self._update_wires_drawing()
+        self.redraw_all()
 
 
     def on_release(self, event):
