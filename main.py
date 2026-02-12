@@ -1,8 +1,7 @@
 # main.py
 from tkinter import *
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from itertools import product
-from tkinter import ttk
 import math
 
 import portes
@@ -52,18 +51,19 @@ class Wire:
     def as_dict(self):
         return {
             "src_gate": self.src.owner.gid,
-            "src_pin": self.src.index,  # output index (0)
+            "src_pin": self.src.index,   # index de sortie (souvent 0)
             "dst_gate": self.dst.owner.gid,
-            "dst_pin": self.dst.index,  # input index
+            "dst_pin": self.dst.index,   # index d'entrée
         }
 
 
 class Gate:
-    def __init__(self, gid: int, gtype: str, x: int, y: int):        
+    def __init__(self, gid: int, gtype: str, x: int, y: int, name: str | None = None):        
         self.gid = gid
         self.gtype = gtype
         self.x = x
         self.y = y
+        self.name = name
 
         self.inputs = []
         self.outputs = []
@@ -168,6 +168,8 @@ class Gate:
         return None
 
     def title(self):
+        if self.gtype == "SRC":
+            return f"Entrée {self.name}" if self.name else "Entrée"
         return {
             "SRC": "Entree",
             "NOT": "1",
@@ -185,6 +187,7 @@ class Gate:
             "x": self.x,
             "y": self.y,
             "value": self.value if self.gtype == "SRC" else None,
+            "name": self.name if self.gtype == "SRC" else None,
         }
 
 
@@ -304,7 +307,15 @@ class App:
         self.root.bind("<Down>",  lambda e: self._pan_key(0, 40))
 
     def add_gate(self, gtype: str, x: int, y: int):
-        g = Gate(self.next_gid, gtype, x, y)
+        name = None
+        if gtype == "SRC":
+            name = simpledialog.askstring("Nom de l'entrée", "Nom de l'entrée (ex: A, B, EN, CLK...) :")
+            if name is not None:
+                name = name.strip()
+                if name == "":
+                    name = None
+
+        g = Gate(self.next_gid, gtype, x, y, name=name)
         self.next_gid += 1
         self.gates.append(g)
         self.draw_gate(g)
@@ -551,7 +562,7 @@ class App:
 
         gid_to_gate = {}
         for gd in data.get("gates", []):
-            g = Gate(gd["gid"], gd["type"], gd["x"], gd["y"])
+            g = Gate(gd["gid"], gd["type"], gd["x"], gd["y"], name=gd.get("name"))
             if g.gtype == "SRC":
                 g.value = bool(gd.get("value", False))
             self.gates.append(g)
@@ -752,8 +763,14 @@ class App:
 
         order = self._topological_gates(dst_to_src, gid_map)
 
-        # noms A, B, C... associés aux SRC dans l'ordre
-        var_names = self._var_names(len(srcs))
+        # fallback A,B,C...
+        fallback = self._var_names(len(srcs))
+
+        var_names = []
+        for i, g in enumerate(srcs):
+            nm = (g.name or "").strip()
+            var_names.append(nm if nm else fallback[i])
+
         src_name_by_gid = {srcs[i].gid: var_names[i] for i in range(len(srcs))}
 
         intermediate = []
