@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from itertools import product
 from collections import deque
 import math
+import os
 
 import portes
 import saveAndLoad
@@ -187,6 +188,10 @@ class App:
         self.root = root
         self.root.title("Circuits logiques (NSI)")
 
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.circuits_dir = os.path.join(self.base_dir, "circuits")
+        os.makedirs(self.circuits_dir, exist_ok=True)
+
         # Frames
         self.left = Frame(root, width=180, padx=8, pady=8)
         self.left.pack(side=LEFT, fill=Y)
@@ -248,7 +253,7 @@ class App:
             ("Expression → Circuit", self.expression_to_circuit),
             ("Sauvegarder…", self.save_file),
             ("Nouveau (vierge)", self.new_circuit),
-            ("Charger…", self.load_file),
+            ("Charger…", self.load_dialog),
         ]
         for i, (text, cmd) in enumerate(actions):
             Button(self.left, text=text, command=cmd).pack(fill=X, pady=(4, 0))
@@ -545,8 +550,9 @@ class App:
         path = filedialog.askopenfilename(filetypes=[("Circuit JSON", "*.json")])
         if not path:
             return
-        
-        data = saveAndLoad.load(path)
+        self.load_from_path(path)
+
+    def load_from_data(self, data: dict):
         self.gates = []
         self.wires = []
         self.gate_by_gid = {}
@@ -569,6 +575,128 @@ class App:
 
         self.redraw_all()
         self.simulate()
+
+    def load_from_path(self, path: str):
+        data = saveAndLoad.load(path)
+        self.load_from_data(data)
+
+    def load_dialog(self):
+
+        if self.new_circuit() == -1:
+            return
+
+        win = Toplevel(self.root)
+        win.title("Charger un circuit")
+        win.resizable(False, False)
+
+        frm = Frame(win, padx=12, pady=12)
+        frm.pack(fill=BOTH, expand=True)
+
+        Label(frm, text="Que veux-tu charger ?", font=("Arial", 12, "bold")).pack(anchor="w", pady=(0, 10))
+
+        def open_file():
+            win.destroy()
+            self.load_file()
+
+        def open_builtin():
+            win.destroy()
+            self.load_builtin_dialog()
+
+        Button(frm, text="Charger un fichier…", command=open_file).pack(fill=X, pady=(0, 6))
+        Button(frm, text="Circuits connus…", command=open_builtin).pack(fill=X)
+
+        Button(frm, text="Annuler", command=win.destroy).pack(fill=X, pady=(10, 0))
+
+
+    def load_builtin_dialog(self):
+        win = Toplevel(self.root)
+        win.title("Circuits connus")
+        win.geometry("650x420")
+
+        outer = Frame(win, padx=10, pady=10)
+        outer.pack(fill=BOTH, expand=True)
+
+        top = Frame(outer)
+        top.pack(fill=X)
+
+        Label(top, text="Circuits disponibles :", font=("Arial", 12, "bold")).pack(side=LEFT)
+
+        # Liste des fichiers JSON dans circuits/
+        files = []
+        for fn in sorted(os.listdir(self.circuits_dir)):
+            if fn.lower().endswith(".json"):
+                files.append(os.path.join(self.circuits_dir, fn))
+
+        if not files:
+            Label(outer, text=f"Aucun circuit trouvé dans:\n{self.circuits_dir}", fg="#444", justify="left").pack(anchor="w", pady=10)
+            Button(outer, text="Fermer", command=win.destroy).pack(anchor="e", pady=(10, 0))
+            return
+
+        # UI: liste + description
+        mid = Frame(outer)
+        mid.pack(fill=BOTH, expand=True, pady=(10, 0))
+
+        listbox = Listbox(mid)
+        listbox.pack(side=LEFT, fill=BOTH, expand=False)
+
+        scrollbar = ttk.Scrollbar(mid, orient="vertical", command=listbox.yview)
+        scrollbar.pack(side=LEFT, fill=Y)
+        listbox.configure(yscrollcommand=scrollbar.set)
+
+        desc = Text(mid, wrap="word")
+        desc.pack(side=LEFT, fill=BOTH, expand=True, padx=(10, 0))
+        desc.insert("end", "Sélectionne un circuit à gauche.\n")
+        desc.config(state="disabled")
+
+        # Charger un petit meta si présent
+        meta_by_path = {}
+        for p in files:
+            try:
+                d = saveAndLoad.load(p)
+                meta = d.get("meta", {}) if isinstance(d, dict) else {}
+                title = meta.get("title") or os.path.splitext(os.path.basename(p))[0]
+                description = meta.get("description") or ""
+                meta_by_path[p] = (title, description)
+            except Exception:
+                title = os.path.splitext(os.path.basename(p))[0]
+                meta_by_path[p] = (title, "(Erreur de lecture du fichier)")
+
+        # Remplir la liste avec titres
+        for p in files:
+            title, _ = meta_by_path[p]
+            listbox.insert("end", title)
+
+        def on_select(_evt=None):
+            i = listbox.curselection()
+            if not i:
+                return
+            p = files[i[0]]
+            title, description = meta_by_path[p]
+            desc.config(state="normal")
+            desc.delete("1.0", "end")
+            desc.insert("end", f"{title}\n\n{description}\n\nFichier:\n{p}")
+            desc.config(state="disabled")
+
+        listbox.bind("<<ListboxSelect>>", on_select)
+        listbox.selection_set(0)
+        on_select()
+
+        bottom = Frame(outer)
+        bottom.pack(fill=X, pady=(10, 0))
+
+        def load_selected():
+            i = listbox.curselection()
+            if not i:
+                return
+            p = files[i[0]]
+            try:
+                self.load_from_path(p)
+                win.destroy()
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible de charger ce circuit :\n{e}")
+
+        Button(bottom, text="Charger", command=load_selected).pack(side=RIGHT)
+        Button(bottom, text="Fermer", command=win.destroy).pack(side=RIGHT, padx=(0, 8))
 
     def overline(self, s: str) -> str:
         return "".join(ch + "\u0305" for ch in s)

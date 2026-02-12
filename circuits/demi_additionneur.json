@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "title": "Demi-additionneur (1 bit)",
+    "description": "Entrées: A, B — Sorties: S (somme), C (retenue) | S = A ⊕ B, C = A.B"
+  },
+  "gates": [
+    {"gid": 1, "type": "SRC", "x": 80, "y": 80, "value": false, "name": "A"},
+    {"gid": 2, "type": "SRC", "x": 80, "y": 170, "value": false, "name": "B"},
+    {"gid": 3, "type": "XOR", "x": 240, "y": 110, "value": null, "name": null},
+    {"gid": 4, "type": "AND", "x": 240, "y": 230, "value": null, "name": null},
+    {"gid": 5, "type": "OUT", "x": 420, "y": 110, "value": null, "name": "S"},
+    {"gid": 6, "type": "OUT", "x": 420, "y": 230, "value": null, "name": "C"}
+  ],
+  "wires": [
+    {"src_gate": 1, "src_pin": 0, "dst_gate": 3, "dst_pin": 0},
+    {"src_gate": 2, "src_pin": 0, "dst_gate": 3, "dst_pin": 1},
+    {"src_gate": 1, "src_pin": 0, "dst_gate": 4, "dst_pin": 0},
+    {"src_gate": 2, "src_pin": 0, "dst_gate": 4, "dst_pin": 1},
+    {"src_gate": 3, "src_pin": 0, "dst_gate": 5, "dst_pin": 0},
+    {"src_gate": 4, "src_pin": 0, "dst_gate": 6, "dst_pin": 0}
+  ],
+  "next_gid": 7
+}

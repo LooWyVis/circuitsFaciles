@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "title": "Multiplexeur 2→1 (MUX)",
+    "description": "Entrées: D0, D1, Sel — Sortie: Y | Y = (!Sel.D0) + (Sel.D1)"
+  },
+  "gates": [
+    {"gid": 1, "type": "SRC", "x": 80, "y": 80, "value": false, "name": "D0"},
+    {"gid": 2, "type": "SRC", "x": 80, "y": 170, "value": false, "name": "D1"},
+    {"gid": 3, "type": "SRC", "x": 80, "y": 260, "value": false, "name": "Sel"},
+
+    {"gid": 4, "type": "NOT", "x": 240, "y": 250, "value": null, "name": null},
+
+    {"gid": 5, "type": "AND", "x": 400, "y": 90, "value": null, "name": null},
+    {"gid": 6, "type": "AND", "x": 400, "y": 190, "value": null, "name": null},
+
+    {"gid": 7, "type": "OR", "x": 560, "y": 140, "value": null, "name": null},
+
+    {"gid": 8, "type": "OUT", "x": 720, "y": 140, "value": null, "name": "Y"}
+  ],
+  "wires": [
+    {"src_gate": 3, "src_pin": 0, "dst_gate": 4, "dst_pin": 0},
+
+    {"src_gate": 4, "src_pin": 0, "dst_gate": 5, "dst_pin": 0},
+    {"src_gate": 1, "src_pin": 0, "dst_gate": 5, "dst_pin": 1},
+
+    {"src_gate": 3, "src_pin": 0, "dst_gate": 6, "dst_pin": 0},
+    {"src_gate": 2, "src_pin": 0, "dst_gate": 6, "dst_pin": 1},
+
+    {"src_gate": 5, "src_pin": 0, "dst_gate": 7, "dst_pin": 0},
+    {"src_gate": 6, "src_pin": 0, "dst_gate": 7, "dst_pin": 1},
+
+    {"src_gate": 7, "src_pin": 0, "dst_gate": 8, "dst_pin": 0}
+  ],
+  "next_gid": 9
+}

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "title": "Additionneur complet (1 bit)",
+    "description": "Entrées: A, B, Cin — Sorties: S, Cout | S = A ⊕ B ⊕ Cin ; Cout = A.B + Cin.(A ⊕ B)"
+  },
+  "gates": [
+    {"gid": 1, "type": "SRC", "x": 80, "y": 80, "value": false, "name": "A"},
+    {"gid": 2, "type": "SRC", "x": 80, "y": 170, "value": false, "name": "B"},
+    {"gid": 3, "type": "SRC", "x": 80, "y": 260, "value": false, "name": "Cin"},
+
+    {"gid": 4, "type": "XOR", "x": 240, "y": 110, "value": null, "name": null},
+    {"gid": 5, "type": "XOR", "x": 400, "y": 170, "value": null, "name": null},
+
+    {"gid": 6, "type": "AND", "x": 240, "y": 230, "value": null, "name": null},
+    {"gid": 7, "type": "AND", "x": 400, "y": 260, "value": null, "name": null},
+
+    {"gid": 8, "type": "OR", "x": 560, "y": 245, "value": null, "name": null},
+
+    {"gid": 9, "type": "OUT", "x": 560, "y": 170, "value": null, "name": "S"},
+    {"gid": 10, "type": "OUT", "x": 720, "y": 245, "value": null, "name": "Cout"}
+  ],
+  "wires": [
+    {"src_gate": 1, "src_pin": 0, "dst_gate": 4, "dst_pin": 0},
+    {"src_gate": 2, "src_pin": 0, "dst_gate": 4, "dst_pin": 1},
+
+    {"src_gate": 4, "src_pin": 0, "dst_gate": 5, "dst_pin": 0},
+    {"src_gate": 3, "src_pin": 0, "dst_gate": 5, "dst_pin": 1},
+
+    {"src_gate": 1, "src_pin": 0, "dst_gate": 6, "dst_pin": 0},
+    {"src_gate": 2, "src_pin": 0, "dst_gate": 6, "dst_pin": 1},
+
+    {"src_gate": 3, "src_pin": 0, "dst_gate": 7, "dst_pin": 0},
+    {"src_gate": 4, "src_pin": 0, "dst_gate": 7, "dst_pin": 1},
+
+    {"src_gate": 6, "src_pin": 0, "dst_gate": 8, "dst_pin": 0},
+    {"src_gate": 7, "src_pin": 0, "dst_gate": 8, "dst_pin": 1},
+
+    {"src_gate": 5, "src_pin": 0, "dst_gate": 9, "dst_pin": 0},
+    {"src_gate": 8, "src_pin": 0, "dst_gate": 10, "dst_pin": 0}
+  ],
+  "next_gid": 11
+}
