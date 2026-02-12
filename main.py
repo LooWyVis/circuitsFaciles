@@ -165,7 +165,10 @@ class Gate:
 
     def title(self):
         if self.gtype == "SRC":
-            return f"Entrée {self.name}" if self.name else "Entrée"
+            return f"{self.name}" if self.name else "Entrée"
+        if self.gtype == "OUT":
+            return f"{self.name}" if self.name else "Sortie"
+
         return self.TITLES.get(self.gtype, self.gtype)
 
     def as_dict(self):
@@ -175,7 +178,7 @@ class Gate:
             "x": self.x,
             "y": self.y,
             "value": self.value if self.gtype == "SRC" else None,
-            "name": self.name if self.gtype == "SRC" else None,
+            "name": self.name if self.gtype in ("SRC", "OUT") else None,
         }
 
 
@@ -294,11 +297,12 @@ class App:
         self.root.bind("<Down>", lambda e: self._pan_key(0, 40))
 
     def add_gate(self, gtype: str, x: int, y: int, name=None, ask_name=True):
-        if gtype == "SRC":
+        if gtype in ("SRC", "OUT"):
             if name is not None:
                 name = str(name).strip() or None
             elif ask_name:
-                name = simpledialog.askstring("Nom de l'entrée", "Nom de l'entrée (ex: A, B, EN, CLK...) :")
+                label = "Nom de l'entrée" if gtype == "SRC" else "Nom de la sortie"
+                name = simpledialog.askstring(label, f"{label} (ex: A, B, S, LED1...) :")
                 name = name.strip() if name else None
 
         g = Gate(self.next_gid, gtype, x, y, name=name)
@@ -436,6 +440,12 @@ class App:
         if g and g.gtype == "SRC":
             g.value = not g.value
             self.simulate()
+
+        elif g and g.gtype == "OUT":
+            name = simpledialog.askstring("Nom de la sortie", "Nom de la sortie :")
+            if name:
+                g.name = name.strip()
+                self.redraw_all()
 
     def _build_topo_order(self):
         """Construit un ordre topologique des gates pour simulation optimisée"""
@@ -686,7 +696,7 @@ class App:
         single_output = len(outs) == 1
         out_exprs = []
         for i, outg in enumerate(outs):
-            out_name = "S" if single_output else f"OUT{outg.gid}"
+            out_name = outg.name or ("S" if single_output else f"{outg.gid}")
             key = (outg.gid, 0)
             if key not in dst_to_src:
                 out_exprs.append((out_name, "Ø"))
