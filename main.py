@@ -1182,6 +1182,28 @@ class App:
 
 def main_ui():
     root = Tk()
+
+    style = ttk.Style(root)
+
+    # Liste des thèmes disponibles (debug éventuel)
+    # print(style.theme_names())
+
+    # Forcer un thème clair non dépendant du système
+    style.theme_use("clam")
+
+    # Couleurs claires explicites
+    style.configure(".", 
+                    background="#f0f0f0",
+                    foreground="black",
+                    fieldbackground="white")
+
+    style.configure("TButton",
+                    background="#e6e6e6",
+                    foreground="black")
+
+    style.map("TButton",
+            background=[("active", "#d9d9d9")])
+
     try:
         from PIL import Image, ImageTk
         ico = Image.open('logo.png')
