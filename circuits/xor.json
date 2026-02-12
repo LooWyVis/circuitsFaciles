@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "title": "XOR décomposé avec ET/OU/NON",
+    "description": "Création du XOR depuis les portes de bases"
+  },
+  "gates": [
+    {
+      "gid": 1,
+      "type": "SRC",
+      "x": 67.6436,
+      "y": 312.5819,
+      "value": true,
+      "name": "A"
+    },
+    {
+      "gid": 2,
+      "type": "SRC",
+      "x": 84.75129999999999,
+      "y": 461.65139999999997,
+      "value": true,
+      "name": "B"
+    },
+    {
+      "gid": 3,
+      "type": "OUT",
+      "x": 721.9032,
+      "y": 383.564,
+      "value": null,
+      "name": "S"
+    },
+    {
+      "gid": 4,
+      "type": "NOT",
+      "x": 227.75659999999996,
+      "y": 374.0307,
+      "value": null,
+      "name": null
+    },
+    {
+      "gid": 5,
+      "type": "NOT",
+      "x": 228.40789999999993,
+      "y": 525.8771999999999,
+      "value": null,
+      "name": null
+    },
+    {
+      "gid": 6,
+      "type": "OR",
+      "x": 571.603,
+      "y": 383.54350000000005,
+      "value": null,
+      "name": null
+    },
+    {
+      "gid": 7,
+      "type": "AND",
+      "x": 425.54119999999995,
+      "y": 319.1486,
+      "value": null,
+      "name": null
+    },
+    {
+      "gid": 8,
+      "type": "AND",
+      "x": 428.22069999999997,
+      "y": 446.89759999999995,
+      "value": null,
+      "name": null
+    }
+  ],
+  "wires": [
+    {
+      "src_gate": 1,
+      "src_pin": 0,
+      "dst_gate": 4,
+      "dst_pin": 0
+    },
+    {
+      "src_gate": 4,
+      "src_pin": 0,
+      "dst_gate": 8,
+      "dst_pin": 0
+    },
+    {
+      "src_gate": 2,
+      "src_pin": 0,
+      "dst_gate": 8,
+      "dst_pin": 1
+    },
+    {
+      "src_gate": 2,
+      "src_pin": 0,
+      "dst_gate": 5,
+      "dst_pin": 0
+    },
+    {
+      "src_gate": 5,
+      "src_pin": 0,
+      "dst_gate": 7,
+      "dst_pin": 1
+    },
+    {
+      "src_gate": 1,
+      "src_pin": 0,
+      "dst_gate": 7,
+      "dst_pin": 0
+    },
+    {
+      "src_gate": 7,
+      "src_pin": 0,
+      "dst_gate": 6,
+      "dst_pin": 0
+    },
+    {
+      "src_gate": 8,
+      "src_pin": 0,
+      "dst_gate": 6,
+      "dst_pin": 1
+    },
+    {
+      "src_gate": 6,
+      "src_pin": 0,
+      "dst_gate": 3,
+      "dst_pin": 0
+    }
+  ],
+  "next_gid": 9
+}
