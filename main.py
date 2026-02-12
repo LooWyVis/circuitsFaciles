@@ -3,6 +3,8 @@ from tkinter import *
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from itertools import product
 import math
+import ast
+import re
 
 import portes
 import saveAndLoad
@@ -254,6 +256,7 @@ class App:
         Label(self.left, text="Actions", font=("Arial", 12, "bold")).pack(anchor="w")
         # Button(self.left, text="Simuler", command=self.simulate).pack(fill=X, pady=(6, 0))
         Button(self.left, text="Table de vérité", command=self.show_truth_table).pack(fill=X, pady=(4, 0))
+        Button(self.left, text="Expression → Circuit", command=self.expression_to_circuit).pack(fill=X, pady=(4, 0))
         Button(self.left, text="Sauvegarder…", command=self.save_file).pack(fill=X, pady=(4, 0))
         Button(self.left, text="Nouveau (vierge)", command=self.new_circuit).pack(fill=X, pady=(4, 0))
         Button(self.left, text="Charger…", command=self.load_file).pack(fill=X, pady=(4, 0))
@@ -306,14 +309,20 @@ class App:
         self.root.bind("<Up>",    lambda e: self._pan_key(0, -40))
         self.root.bind("<Down>",  lambda e: self._pan_key(0, 40))
 
-    def add_gate(self, gtype: str, x: int, y: int):
-        name = None
+    def add_gate(self, gtype: str, x: int, y: int, name=None, ask_name=True):
+        # Nom des SRC : soit imposé, soit demandé
         if gtype == "SRC":
-            name = simpledialog.askstring("Nom de l'entrée", "Nom de l'entrée (ex: A, B, EN, CLK...) :")
             if name is not None:
-                name = name.strip()
-                if name == "":
-                    name = None
+                name = str(name).strip() or None
+            elif ask_name:
+                name = simpledialog.askstring(
+                    "Nom de l'entrée",
+                    "Nom de l'entrée (ex: A, B, EN, CLK...) :"
+                )
+                if name is not None:
+                    name = name.strip()
+                    if name == "":
+                        name = None
 
         g = Gate(self.next_gid, gtype, x, y, name=name)
         self.next_gid += 1
@@ -896,7 +905,7 @@ class App:
                 "Repartir sur un circuit vierge ?\nLes modifications non sauvegardées seront perdues."
             )
             if not ok:
-                return
+                return -1
 
         self.gates = []
         self.wires = []
@@ -1151,6 +1160,191 @@ class App:
         self.redraw_all()
         self.update_colors()
 
+
+
+    def _tokenize_expr(self, s: str):
+        """Tokens: identifiers, ! . + ^ ( )"""
+        s = s.replace(" ", "")
+        tokens = []
+        i = 0
+        while i < len(s):
+            c = s[i]
+            if c.isalpha() or c == "_":
+                j = i + 1
+                while j < len(s) and (s[j].isalnum() or s[j] == "_"):
+                    j += 1
+                tokens.append(("ID", s[i:j]))
+                i = j
+            elif c in ("!", ".", "+", "^", "(", ")"):
+                tokens.append((c, c))
+                i += 1
+            else:
+                raise ValueError(f"Caractère invalide: {c}")
+        return tokens
+
+
+    def _to_rpn(self, tokens):
+        """Shunting-yard. Output is RPN list of tokens."""
+        prec = {"!": 3, ".": 2, "^": 1, "+": 0}  # NOT > AND > XOR > OR
+        right_assoc = {"!"}  # unary NOT is right-associative
+
+        out = []
+        ops = []
+
+        def pop_ops(min_prec):
+            while ops:
+                top = ops[-1]
+                if top == "(":
+                    break
+                ptop = prec[top]
+                if ptop > min_prec or (ptop == min_prec and top not in right_assoc):
+                    out.append(("OP", ops.pop()))
+                else:
+                    break
+
+        prev_was_value = False  # helps detect unary !
+
+        for typ, val in tokens:
+            if typ == "ID":
+                out.append(("ID", val))
+                prev_was_value = True
+
+            elif val == "(":
+                ops.append("(")
+                prev_was_value = False
+
+            elif val == ")":
+                while ops and ops[-1] != "(":
+                    out.append(("OP", ops.pop()))
+                if not ops or ops[-1] != "(":
+                    raise ValueError("Parenthèses non équilibrées")
+                ops.pop()
+                prev_was_value = True
+
+            else:
+                # operator
+                op = val
+                if op == "!":
+                    # unary NOT is always unary here
+                    ops.append("!")
+                    prev_was_value = False
+                else:
+                    if not prev_was_value:
+                        raise ValueError(f"Opérateur '{op}' placé au mauvais endroit")
+                    pop_ops(prec[op])
+                    ops.append(op)
+                    prev_was_value = False
+
+        while ops:
+            if ops[-1] == "(":
+                raise ValueError("Parenthèses non équilibrées")
+            out.append(("OP", ops.pop()))
+
+        return out
+
+
+    def _rpn_to_ast(self, rpn):
+        """Build a tiny AST: ('ID', name) or ('NOT', a) or ('AND', a, b) etc."""
+        st = []
+        for typ, val in rpn:
+            if typ == "ID":
+                st.append(("ID", val))
+            else:
+                op = val
+                if op == "!":
+                    if len(st) < 1:
+                        raise ValueError("NOT sans opérande")
+                    a = st.pop()
+                    st.append(("NOT", a))
+                else:
+                    if len(st) < 2:
+                        raise ValueError(f"Opérateur '{op}' sans 2 opérandes")
+                    b = st.pop()
+                    a = st.pop()
+                    node = {".": "AND", "+": "OR", "^": "XOR"}[op]
+                    st.append((node, a, b))
+        if len(st) != 1:
+            raise ValueError("Expression invalide")
+        return st[0]
+
+
+
+    def expression_to_circuit(self):
+
+        if self.new_circuit() == -1:
+            return
+
+        expr = simpledialog.askstring(
+            "Expression → circuit",
+            "Expression (ex: !(A.B) + C)\nOpérateurs: ! (NON), . (ET), + (OU), ^ (XOR)"
+        )
+        if not expr:
+            return
+
+        try:
+            tokens = self._tokenize_expr(expr)
+            rpn = self._to_rpn(tokens)
+            ast = self._rpn_to_ast(rpn)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Expression invalide :\n{e}")
+            return
+
+        # reset
+        self.new_circuit()
+
+        # créer/partager les SRC
+        src_by_name = {}
+
+        def get_src(name, x, y):
+            if name not in src_by_name:
+                g = self.add_gate("SRC", x, y, name=name, ask_name=False)
+                src_by_name[name] = g
+            return src_by_name[name]
+
+        # placement simple
+        x0, y0 = 80, 80
+        y_step = 90
+        gate_x_step = 160
+
+        # build returns (gate, y_used_range_center)
+        def build(node, depth=0, y=0):
+            kind = node[0]
+
+            if kind == "ID":
+                name = node[1]
+                g = get_src(name, x0, y0 + y * y_step)
+                return g, y
+
+            if kind == "NOT":
+                child_gate, cy = build(node[1], depth + 1, y)
+                g = self.add_gate("NOT", x0 + (depth + 1) * gate_x_step, y0 + cy * y_step - 20)
+                self.wires.append(Wire(child_gate.outputs[0], g.inputs[0]))
+                return g, cy
+
+            # binary
+            op = kind  # AND / OR / XOR
+            left, right = node[1], node[2]
+
+            gl, yl = build(left, depth + 1, y)
+            gr, yr = build(right, depth + 1, y + 1)
+
+            midy = (yl + yr) / 2.0
+            g = self.add_gate(op, x0 + (depth + 1) * gate_x_step, y0 + midy * y_step - 20)
+
+            self.wires.append(Wire(gl.outputs[0], g.inputs[0]))
+            self.wires.append(Wire(gr.outputs[0], g.inputs[1]))
+            return g, midy
+
+        root_gate, midy = build(ast, depth=0, y=0)
+        out = self.add_gate("OUT", x0 + 4 * gate_x_step, y0 + midy * y_step - 20)
+        self.wires.append(Wire(root_gate.outputs[0], out.inputs[0]))
+
+        self.redraw_all()
+        self.simulate()
+
+################################
+#   Main
+################################
 
 def main_ui():
     root = Tk()
