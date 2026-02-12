@@ -464,6 +464,12 @@ class App:
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
+
+        # Si cycle : il reste des nodes avec in_degree > 0, donc pas dans order.
+        # On les ajoute quand même pour qu'elles soient calculées dans simulate().
+        if len(order) < len(in_degree):
+            remaining = [gid for gid in in_degree.keys() if gid not in order]
+            order.extend(remaining)
         
         self.topo_order = order
         self.topo_dirty = False
@@ -491,6 +497,8 @@ class App:
                 newv = w.src.value
                 if w.value != newv:
                     w.value = newv
+                    changed = True
+                if w.dst.value != newv:
                     w.dst.value = newv
                     changed = True
 
