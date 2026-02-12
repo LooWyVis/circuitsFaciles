@@ -1137,6 +1137,15 @@ class App:
 
 def main_ui():
     root = Tk()
+
+    try:
+        from PIL import Image, ImageTk
+        ico = Image.open('logo.png')
+        photo = ImageTk.PhotoImage(ico)
+        root.wm_iconphoto(False, photo)
+    except:
+        pass
+
     root.geometry("1000x650")
     App(root)
     root.mainloop()
