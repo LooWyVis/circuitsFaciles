@@ -1206,7 +1206,13 @@ def main_ui():
 
     try:
         from PIL import Image, ImageTk
-        ico = Image.open('logo.png')
+        # Chemin du dossier où se trouve le script
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Chemin absolu vers logo.png
+        icon_path = os.path.join(base_dir, "logo.png")
+        
+        ico = Image.open(icon_path)
         photo = ImageTk.PhotoImage(ico)
         root.wm_iconphoto(False, photo)
     except:
